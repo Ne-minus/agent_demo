@@ -1,3 +1,5 @@
+import streamlit as st
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -8,6 +10,8 @@ import json
 from colorama import init, Fore, Style
 import os
 from langchain_gigachat import GigaChat
+
+# забрал всё из main.py
 
 from agent.graph_structure.tools import (
     response_tool,
@@ -49,23 +53,31 @@ config = {
     }
 }
 
-conversation = {"messages": []}
+# вот здесь начинается streamlit
+st.title('Chat')
+st.caption('🚀Chat')
 
-print("Чем могу помочь?")
-while True:
-    user_input = input("You: ")
-    if user_input.lower() in ("exit", "quit"):
-        print("Goodbye!")
-        break
+# Стартовое сообщение сохраняем в session_state
+if "message" not in st.session_state:
+    st.session_state["messages"] = [{"role": "assistant", "content": "Чем могу помочь?"}]
 
-    conversation["messages"].append(HumanMessage(content=user_input))
+# Выводим стартовое сообщение в чат
+for msg in st.session_state.messages:
+    st.chat_message(msg["role"]).write(msg["content"])
+
+conversation = {"messages": []} # это по аналогии с main.py, чтобы в терминале дублировалось все
+
+if prompt := st.chat_input(): # пользователь пишет
+    st.session_state.messages.append({"role": "user", "content": HumanMessage(content=prompt)}) # добавляем сообщение пользователя в session_state
+    st.chat_message("user").write(prompt) # выводим сообщение пользователя в чат
+
+    conversation["messages"].append(HumanMessage(content=prompt))
 
     stream = graph.stream(
         conversation,
         stream_mode="values",
         config=config,
     )
-    print(stream)
 
     for step in stream:
         msg = step["messages"][-1]
@@ -75,11 +87,15 @@ while True:
 
             if isinstance(msg, AIMessage):
                 print(f"{Fore.YELLOW}{msg.content}{Style.RESET_ALL}")
+                st.session_state.messages.append({"role": "assistant", "content": msg})
+                conversation["messages"].append(msg)
             elif getattr(msg, "name", "") == "response_tool":
                 data = json.loads(msg.content)
                 print(f"{Fore.GREEN}{data.get('answer', '')}{Style.RESET_ALL}")
             else:
                 msg.pretty_print()
             conversation["messages"].append(msg)
+            st.session_state.messages.append(msg)
+            st.chat_message("assistant").write(msg.content)
         except AttributeError:
             print(msg)
